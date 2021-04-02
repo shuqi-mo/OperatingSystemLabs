@@ -1,0 +1,24 @@
+(THU.CST) os is loading ...
+
+Special kernel symbols:
+  entry  0x00100000 (phys)
+  etext  0x0010399c (phys)
+  edata  0x0010e950 (phys)
+  end    0x0010fdc0 (phys)
+Kernel executable memory footprint: 64KB
+ebp:0x7b3800100bcc eip:0x00100bcc args:0x00010094 0x0010e950 0x00007b68 0x001000a2 
+    kern/debug/kdebug.c:306: print_stackframe+33
+ebp:0x7b4800100f4d eip:0x00100bcc args:0x00000000 0x00000000 0x00000000 0x0010008d 
+    kern/debug/kmonitor.c:125: mon_backtrace+23
+ebp:0x7b68001000a2 eip:0x00100bcc args:0x00000000 0x00007b90 0xffff0000 0x00007b94 
+    kern/init/init.c:48: grade_backtrace2+32
+ebp:0x7b88001000d1 eip:0x00100bcc args:0x00000000 0xffff0000 0x00007bb4 0x001000e5 
+    kern/init/init.c:53: grade_backtrace1+37
+ebp:0x7ba8001000f8 eip:0x00100bcc args:0x00000000 0x00100000 0xffff0000 0x00100109 
+    kern/init/init.c:58: grade_backtrace0+29
+ebp:0x7bc800100124 eip:0x00100bcc args:0x00000000 0x00000000 0x00000000 0x0010399c 
+    kern/init/init.c:63: grade_backtrace+37
+ebp:0x7be800100066 eip:0x00100bcc args:0x00000000 0x00000000 0x00000000 0x00007c4f 
+    kern/init/init.c:28: kern_init+101
+ebp:0x7bf800007d6e eip:0x00100bcc args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8 
+    <unknow>: -- 0x00007d6d --
