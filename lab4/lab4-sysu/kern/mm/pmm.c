@@ -8,9 +8,6 @@
 #include <default_pmm.h>
 #include <sync.h>
 #include <error.h>
-#include <swap.h>
-#include <vmm.h>
-#include <kmalloc.h>
 
 /* *
  * Task State Segment:
@@ -156,22 +153,11 @@ struct Page *
 alloc_pages(size_t n) {
     struct Page *page=NULL;
     bool intr_flag;
-    
-    while (1)
+    local_intr_save(intr_flag);
     {
-         local_intr_save(intr_flag);
-         {
-              page = pmm_manager->alloc_pages(n);
-         }
-         local_intr_restore(intr_flag);
-
-         if (page != NULL || n > 1 || swap_init_ok == 0) break;
-         
-         extern struct mm_struct *check_mm_struct;
-         //cprintf("page %x, call swap_out in alloc_pages %d\n",page, n);
-         swap_out(check_mm_struct, n, 0);
+        page = pmm_manager->alloc_pages(n);
     }
-    //cprintf("n %d,get page %x, No %d in alloc_pages\n",n,page,(page-pages));
+    local_intr_restore(intr_flag);
     return page;
 }
 
@@ -328,8 +314,6 @@ pmm_init(void) {
     check_boot_pgdir();
 
     print_pgdir();
-    
-    kmalloc_init();
 
 }
 
@@ -363,18 +347,20 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
      *   PTE_W           0x002                   // page table/directory entry flags bit : Writeable
      *   PTE_U           0x004                   // page table/directory entry flags bit : User can access
      */
-#if 0
-    pde_t *pdep = NULL;   // (1) find page directory entry
-    if (0) {              // (2) check if entry is not present
-                          // (3) check if creating is needed, then alloc page for page table
-                          // CAUTION: this page is used for page table, not for common data page
-                          // (4) set page reference
-        uintptr_t pa = 0; // (5) get linear address of page
-                          // (6) clear page content using memset
-                          // (7) set page directory entry's permission
+    pde_t *pdep = &pgdir[PDX(la)];   // (1) find page directory entry
+    if (!(*pdep & PTE_P)) {              // (2) check if entry is not present
+        struct Page* page;
+        // (3) check if creating is needed, then alloc page for page table
+        // CAUTION: this page is used for page table, not for common data page
+        if(!create || (page = alloc_page()) == NULL) {
+            return NULL;
+        }
+        set_page_ref(page, 1); // (4) set page reference
+        uintptr_t pa = page2pa(page); // (5) get linear address of page
+        memset(KADDR(pa), 0, PGSIZE); // (6) clear page content using memset
+        *pdep = pa | PTE_U | PTE_W | PTE_P;  // (7) set page directory entry's permission
     }
-    return NULL;          // (8) return page table entry
-#endif
+    return &((pte_t*)KADDR(PDE_ADDR(*pdep)))[PTX(la)];          // (8) return page table entry
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -411,15 +397,13 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
      * DEFINEs:
      *   PTE_P           0x001                   // page table/directory entry flags bit : Present
      */
-#if 0
-    if (0) {                      //(1) check if this page table entry is present
-        struct Page *page = NULL; //(2) find corresponding page to pte
-                                  //(3) decrease page reference
-                                  //(4) and free this page when page reference reachs 0
-                                  //(5) clear second page table entry
-                                  //(6) flush tlb
+    if (*ptep & PTE_P) {                      //(1) check if this page table entry is present
+        struct Page *page = pte2page(*ptep); //(2) find corresponding page to pte
+        if (page_ref_dec(page) == 0)  //(3) decrease page reference
+            free_page(page);  //(4) and free this page when page reference reachs 0
+        *ptep = 0;  //(5) clear second page table entry
+        tlb_invalidate(pgdir, la);  //(6) flush tlb
     }
-#endif
 }
 
 //page_remove - free an Page which is related linear address la and has an validated pte
@@ -467,29 +451,6 @@ tlb_invalidate(pde_t *pgdir, uintptr_t la) {
     if (rcr3() == PADDR(pgdir)) {
         invlpg((void *)la);
     }
-}
-
-// pgdir_alloc_page - call alloc_page & page_insert functions to 
-//                  - allocate a page size memory & setup an addr map
-//                  - pa<->la with linear address la and the PDT pgdir
-struct Page *
-pgdir_alloc_page(pde_t *pgdir, uintptr_t la, uint32_t perm) {
-    struct Page *page = alloc_page();
-    if (page != NULL) {
-        if (page_insert(pgdir, page, la, perm) != 0) {
-            free_page(page);
-            return NULL;
-        }
-        if (swap_init_ok){
-            swap_map_swappable(check_mm_struct, la, page, 0);
-            page->pra_vaddr=la;
-            assert(page_ref(page) == 1);
-            //cprintf("get No. %d  page: pra_vaddr %x, pra_link.prev %x, pra_link_next %x in pgdir_alloc_page\n", (page-pages), page->pra_vaddr,page->pra_page_link.prev, page->pra_page_link.next);
-        }
-
-    }
-
-    return page;
 }
 
 static void
