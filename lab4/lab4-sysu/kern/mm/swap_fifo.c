@@ -61,21 +61,51 @@ _fifo_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int
 static int
 _fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
 {
-     list_entry_t *head=(list_entry_t*) mm->sm_priv;
-         assert(head != NULL);
-     assert(in_tick==0);
-     /* Select the victim */
-     /*LAB3 EXERCISE 2: YOUR CODE*/ 
-     //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
-     //(2)  assign the value of *ptr_page to the addr of this page
-     /* Select the tail */
-     list_entry_t *le = head->prev;
-     assert(head!=le);
-     struct Page *p = le2page(le, pra_page_link);
-     list_del(le);
-     assert(p !=NULL);
-     *ptr_page = p;
-     return 0;
+    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+    assert(head != NULL);
+    assert(in_tick==0);
+    /* Select the victim */
+    /*LAB3 EXERCISE 2: YOUR CODE*/ 
+    //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
+    //(2)  assign the value of *ptr_page to the addr of this page
+    /* Select the tail */
+    list_entry_t *le = head->prev;
+    assert(head!=le);
+    struct Page *p = le2page(le, pra_page_link);
+    list_del(le);
+    assert(p !=NULL);
+    *ptr_page = p;
+    return 0;
+}
+
+static int
+_extended_clock_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick) {
+    list_entry_t *head=(list_entry_t*) mm->sm_priv;
+    assert(head!=NULL);
+    assert(in_tick==0);
+    for (int i = 0; i < 3; i++) {
+        list_entry_t *le = head->prev;
+        assert(head!=le);
+        while (le != head) {
+            struct Page *p = le2page(le, pra_page_link);
+            pte_t* ptep = get_pte(mm->pgdir, p->pra_vaddr, 0);
+            if (!(*ptep & PTE_A) && !(*ptep & PTE_D)) {
+                list_del(le);
+                assert(p != NULL);
+                *ptr_page = p;
+                return 0;
+            }
+            if (!i) {
+                *ptep &= ~PTE_A;
+            }
+            else if (i == 1) {
+                *ptep &= ~PTE_D;
+            }
+            le = le->prev;
+            tlb_invalidate(mm->pgdir, le);
+        }
+    }
+    return -1;
 }
 
 static int
@@ -140,12 +170,12 @@ _fifo_tick_event(struct mm_struct *mm)
 
 struct swap_manager swap_manager_fifo =
 {
-     .name            = "fifo swap manager",
+     .name            = "extended_clock swap manager",
      .init            = &_fifo_init,
      .init_mm         = &_fifo_init_mm,
      .tick_event      = &_fifo_tick_event,
      .map_swappable   = &_fifo_map_swappable,
      .set_unswappable = &_fifo_set_unswappable,
-     .swap_out_victim = &_fifo_swap_out_victim,
+     .swap_out_victim = &_extended_clock_swap_out_victim,
      .check_swap      = &_fifo_check_swap,
 };
